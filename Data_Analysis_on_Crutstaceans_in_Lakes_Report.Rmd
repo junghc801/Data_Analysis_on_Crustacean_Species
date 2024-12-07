@@ -1,0 +1,144 @@
+---
+title: "Data Analysis on Crustaceans in Lakes"
+author: "Haechan Jung"
+date: "2024-12-04"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+## Introduciton
+
+Biology researchers analyze investigation data to demonstrate their theories as researching living things. They try to collect data as much as possible since more data will enhance the quality of the research result. Still, there are several realistic constraints such as unaffordable expenses and insufficient technology. This data analysis report proposes a prediction model to overcome the limitations; we can predict the number of crustacean species in a new lake with several predictor variables. The model is designed based on a data set that has 30 random lakes and variables:
+
+| Variable | Description |
+|:-----------------:|:---------------------------------------------------:|
+| Speices | Number of Crustacean Species |
+| MeanDepth | Average Lake depth in Meters |
+| Cond | Specific Conductance (A Measure of Mineral Content), in Micro Siemans |
+| Elev | Lake Elevation, in Meters |
+| Lat | Latitude, Degrees North |
+| Long | Longitude, Degrees West |
+| NLakes | Number of Lakes Within 20km |
+| Photo | Rate of Photosynthesis (Measured by Using C14) |
+| Area | Surface Area of Lake, in Hectares |
+
+The data set has no missing value, and all of the covariates are quantitative values. Species was used as a a response, and the others except for Photo were used as predictors in the model. Logarithmic transformation is applied to Elev and Area variables since they have a relatively wider range than other variables.
+
+## Methods
+
+The prediction model was developed through a comparison of the best models from three different model selection techniques: forward selection, backward selection, and stepwise selection. All of these three are to find the model that has the relatively smallest value of AIC. The two most frequent models were shortlisted from the results, and the final model was settled after a comparison of AIC values.
+
+The final linear regression model is:\
+$$
+species_i = \beta_0 + \beta_1 \ meanDepth_i + \beta_{2} \ {cond_i} +\beta_{3} \ {log \ elev_i} + \beta_{4} \ {lat_i}
+$$ $$
++ \ \beta_{5} \ {long_i} + \beta_{6} \ {nLakes_i} + \beta_{7} \ {log \ area_i} + e_{i},  \ \ \ e_{i} \stackrel{iid}{\sim}(0, \sigma^2)
+$$
+
+## Diagnosis
+
+The reliability of the final model was diagnosed with the residual plot, standardized residual plot, and qqplot.
+
+```{r echo=FALSE, message = FALSE, warning = FALSE, warnings = FALSE}
+library(alr4)
+library(tidyverse)
+library(readr)
+library(GGally)
+library(dplyr)
+library(leaps)
+library(MASS)
+library(broom)
+library(patchwork)
+df = read_csv("C:/STAT_3301_Data_Storage/projectdata24.csv")
+```
+
+```{r echo = FALSE}
+df = subset(df, select = c(Species, MeanDepth, Cond, Elev, Lat, Long, NLakes, Photo, Area))
+```
+
+```{r echo = FALSE}
+df = df %>% mutate(logElev = log10(Elev + 1.1), logArea = log10(Area))
+lake = subset(df, select = c(Species, MeanDepth, Cond, logElev, Lat, Long, NLakes, Photo, logArea))
+```
+
+```{r echo=FALSE, out.height = "35%", fig.align='center' }
+lake.lm = lm(Species ~ MeanDepth + Cond + logElev + Lat + Long + NLakes + logArea, data = lake)
+
+base = augment(lake.lm) %>% ggplot(aes(y = .resid)) + geom_hline(yintercept = 0) +
+  theme_bw(20) + ylab("residuals") + geom_point()  + theme(axis.title = element_text(size=11))
+fit_plt = base + aes(x = .fitted) + xlab("fitted values") 
+meanDepth_plt = base + aes(x = MeanDepth) + xlab("Average Depth")
+cond_plt = base + aes(x = Cond) + xlab("Conductance(Mineral)")
+logElev_plt = base + aes(x = logElev) + xlab("Logarithm of Elevation") 
+(fit_plt + meanDepth_plt) / (cond_plt + logElev_plt)
+
+
+lat_plt = base + aes(x = Lat) + xlab("Latitude")
+long_plt = base + aes(x = Long) + xlab("Longitude")
+nLakes_plt = base + aes(x = NLakes) + xlab("Lakes Within 20km")
+logArea_plt = base + aes(x = logArea) + xlab("Logarithm of Area")
+(lat_plt + long_plt) / (nLakes_plt + logArea_plt)
+```
+
+Dispersion of points in residual plots can check if a violation of the model assumption exists or not. An apparent pattern of dispersion that does not show const variability indicates the lack of linearity of a model. Such an obvious pattern or trend does not show in the above residual plots.
+
+```{r echo=FALSE, out.height = "35%", fig.align='center' }
+base = base + aes(y = .std.resid) + ylab("standardized residuals") + theme(axis.title = element_text(size=11))
+fit_plt = base + aes(x = .fitted) + xlab("fitted values") 
+meanDepth_plt = base + aes(x = MeanDepth) + xlab("Average Depth")
+cond_plt = base + aes(x = Cond) + xlab("Conductance(Mineral)")
+logElev_plt = base + aes(x = logElev) + xlab("Logarithm of Elevation") 
+(fit_plt + meanDepth_plt) / (cond_plt + logElev_plt)
+
+lat_plt = base + aes(x = Lat) + xlab("Latitude")
+long_plt = base + aes(x = Long) + xlab("Longitude")
+nLakes_plt = base + aes(x = NLakes) + xlab("Lakes Within 20km")
+logArea_plt = base + aes(x = logArea) + xlab("Logarithm of Area")
+(lat_plt + long_plt) / (nLakes_plt + logArea_plt)
+```
+
+Constant variance is another assumption to be checked for the final model. If a model has constant variance, dispersion in standardized residual plots will show constant variability of fitted values and predictors. An obvious pattern or trend that indicates inconsistency does not show in the above plots.
+
+```{r echo=FALSE, out.height = "45%",, fig.align='center' }
+qqnorm(lake.lm$residuals)
+qqline(lake.lm$residuals)
+```
+
+The normality assumption can be assessed by qqplot. If the dataset is normally distributed, the plotted points will be located around the 45-degree straight line. Except for an outlier, the cluster of points shows the normality of the model.
+
+## Analysis
+
+From the final linear regression model, we can determine the mean and variance function of the number of species:
+
+$$
+E(species_i \ | \ meanDepth,  \ cond, \  log \ elev,  \ lat, \ long, \ nLakes, \ log \ area) = 
+$$ $$
+13.75 + 0.203 \ meanDepth_i -  0.002 \ {cond_i} + 1.497 \ {log \ elev_i} - 0.093 \ {lat_i}
+$$ $$
+- \ 0.066 \ {long_i} + 0.013 \ {nLakes_i} + 1.562 \ {log \ area_i} + e_{i},  \ \ \ \ \ e_{i} \stackrel{iid}{\sim}(0, \sigma^2)
+$$ $$
+Var(species_i \ | \ meanDepth,  \ cond, \  log \ elev,  \ lat, \ long, \ nLakes, \ log \ area) = 6.318
+$$
+
+Also, we can conclude:
+
+-   An additional meter in the average lake depth is associated with a 0.203 increase in the average number of crustacean species.
+
+-   Additional micro Siemens in the conductance is associated with a 0.002 decrease in the average number of crustacean species.
+
+-   A 10-meter increase in the elevation is associated with a 1.497 increase in the average number of crustacean species.
+
+-   A degree increase in the north latitude is associated with a 0.093 decrease in the average number of crustacean species.
+
+-   An additional degree in the west longitude is associated with a 0.066 decrease in the average number of crustacean species.
+
+-   An additional lake within 20km is associated with a 0.013 increase in the average number of crustacean species.
+
+-   A 10-hectare increase in the surface area is associated with a 1.562 increase in the average number of crustacean species.
+
+-   The data analysis cannot find a meaningful linear relationship between the rate of photosynthesis and the number of crustacean species.
+
+## Prediction
+
+The given new lake has characteristics: MeanDepth = 153, Cond = 167, Elev = 372, Lat = 46, Long = -3, NLakes = 44, Area = 58000. The predicted number of species in the new lake is approximately 52.23, and the actual number will fall between 23.26 and 81.20 with 95% confidence.
