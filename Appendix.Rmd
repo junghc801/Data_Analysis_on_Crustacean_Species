@@ -1,0 +1,161 @@
+---
+title: "Final_Project_jung.801"
+author: "Haechan Jung"
+date: "2024-12-04"
+output: pdf_document
+---
+
+```{r message = FALSE, warning=FALSE}
+library(alr4)
+library(tidyverse)
+library(readr)
+library(GGally)
+library(dplyr)
+library(leaps)
+library(MASS)
+library(broom)
+library(patchwork)
+```
+
+```{r message = FALSE, warning=FALSE}
+#Check if all covariates are quantitative
+df = read_csv("C:/STAT_3301_Data_Storage/projectdata24.csv")
+head(df, 5)
+```
+```{r}
+# Check if a missing value exists
+sum(is.na(df))
+```
+```{r}
+# Exclude name column which is unnecessary for further data analysis.
+df = subset(df, select = c(Species, MeanDepth, Cond, Elev, Lat, Long, NLakes, Photo, Area))
+```
+```{r fig.width = 8, fig.height = 6, fig.align='center'}
+pairs(subset(df, select = c(Species, MeanDepth, Cond, Elev, Lat)))
+pairs(subset(df, select = c(Species, Long, NLakes, Photo, Area)))
+```
+```{r}
+range(df$Elev)
+range(df$Area)
+```
+The gaps between the minimum and maximum values are big enough to apply transformation.Since Elev has -1 as the minimum value, it is necessary to add constant(1.1) before taking logarithm
+
+```{r echo = FALSE}
+df = df %>% mutate(logElev = log10(Elev + 1.1), logArea = log10(Area))
+lake = subset(df, select = c(Species, MeanDepth, Cond, logElev, Lat, Long, NLakes, Photo, logArea))
+```
+```{r include=FALSE}
+null = lm(Species ~ 1, data = lake)
+full = lm(Species ~ ., data = lake)
+n = dim(lake)[1]
+
+# Forward selection 
+model_fwd_AIC = stepAIC(null, scope = list(upper = full), direction = "forward", k = 2)
+model_fwd_BIC = stepAIC(null, scope = list(upper = full), direction = "forward", k = log(n))
+
+# Backward selection
+model_bwd_AIC = stepAIC(full, direction = "backward", k = 2)
+model_bwd_BIC = stepAIC(full, direction = "backward", k = log(n))
+
+# Stepwise selection
+model_bth_AIC = stepAIC(full, scope = list(lower = null, upper = full), 
+        direction = "both", k = 2)
+
+# Stepwise selection
+model_bth_BIC = stepAIC(full, scope = list(lower = null, upper = full), 
+        direction = "both", k = log(n))
+```
+
+```{r}
+print(names(model_fwd_AIC$model))
+print(names(model_fwd_BIC$model))
+print(names(model_bwd_AIC$model))
+print(names(model_bwd_BIC$model))
+print(names(model_bth_AIC$model))
+print(names(model_bth_BIC$model))
+```
+```{r}
+extractAIC(model_bth_AIC)
+extractAIC(model_bth_BIC)
+```
+The lowest AIC is 61. We can determine the final model:
+
+$$
+species_i = \beta_0 + \beta_1 \ meanDepth_i + \beta_{2} \ {cond_i} +\beta_{3} \ {log \ elev_i} + \beta_{4} \ {lat_i} \\ +  \beta_{5} \ {long_i} + \beta_{6} \ {nLakes_i} + \beta_{7} \ {log \ area_i} + e_{i}, \ \ \ \ \ e_{i} \stackrel{iid}{\sim}(0, \sigma^2)
+$$
+Diagnosis - Residual plots
+```{r}
+lake.lm = lm(Species ~ MeanDepth + Cond + logElev + Lat + Long + NLakes + logArea, data = lake)
+```
+```{r}
+base = augment(lake.lm) %>% ggplot(aes(y = .resid)) + geom_hline(yintercept = 0) +
+  theme_bw(20) + ylab("residuals") + geom_point() 
+fit_plt = base + aes(x = .fitted) + xlab("fitted values") 
+meanDepth_plt = base + aes(x = MeanDepth) + xlab("Average Depth")
+cond_plt = base + aes(x = Cond) + xlab("Conductance(Mineral)")
+logElev_plt = base + aes(x = logElev) + xlab("Logarithm of Elevation") 
+(fit_plt + meanDepth_plt) / (cond_plt + logElev_plt)
+
+
+lat_plt = base + aes(x = Lat) + xlab("Latitude")
+long_plt = base + aes(x = Long) + xlab("Logarithm of Elevation")
+nLakes_plt = base + aes(x = NLakes) + xlab("Latitude")
+logArea_plt = base + aes(x = logArea) + xlab("Logarithm of Area")
+(lat_plt + long_plt) / (nLakes_plt + logArea_plt)
+```
+An obvious pattern that indicate the lack of linearlity does not show in null plot and the other residual plots. 
+
+```{r}
+base = base + aes(y = .std.resid) + ylab("standardized residuals") + theme(axis.title.y = element_text(size=11))
+fit_plt = base + aes(x = .fitted) + xlab("fitted values") 
+meanDepth_plt = base + aes(x = MeanDepth) + xlab("Average Depth")
+cond_plt = base + aes(x = Cond) + xlab("Conductance(Mineral)")
+logElev_plt = base + aes(x = logElev) + xlab("Logarithm of Elevation") 
+(fit_plt + meanDepth_plt) / (cond_plt + logElev_plt)
+
+lat_plt = base + aes(x = Lat) + xlab("Latitude")
+long_plt = base + aes(x = Long) + xlab("Logarithm of Elevation")
+nLakes_plt = base + aes(x = NLakes) + xlab("Latitude")
+logArea_plt = base + aes(x = logArea) + xlab("Logarithm of Area")
+(lat_plt + long_plt) / (nLakes_plt + logArea_plt)
+```
+Again, an obvious pattern was not indicated in the standardized residual plots. 
+
+```{r}
+qqnorm(lake.lm$residuals)
+qqline(lake.lm$residuals)
+```
+Except for an outlier, the qqlot shows normality of the model.
+
+## 5. Interpretation
+```{r}
+summary(lake.lm)$sigma^2
+varFunc = model$sigma^2
+```
+
+
+Additional meter in the average lake depth is associated with 0.2 increase in the average number of crustacean species.
+
+Additional micro Siemans in the conductance is associated with 0.002 decrease in the average number of crustacean species.
+
+10 meters increase in the elevation is associated with 1.50 increase in the average number of crustacean species.
+
+A degree increase in the north latitude is associated with 0.09 decrease in the average number of crustacean species.
+
+Additional degree in the west longitude is associated with 0.07 decrease in the average number of crustacean species.
+
+Additional lake within 20km is associated with 0.013 increase in the average number of crustacean species.
+
+10 hectares increase in the surface area is associated with 1.56 increase in the average number of crustacean species.
+
+The data analysis cannot find a meaningful meaningful linear relationship between rate of photosynthesis and number of crustacean species.
+
+
+## Prediction     
+
+```{r}
+predict(lake.lm, newdata = data.frame(MeanDepth = 153, Cond = 167, logElev = log10(372 + 1.1), Lat = 46, Long = -3, NLakes = 44, logArea = log10(58000)), interval = "prediction", level = 0.95)
+```
+A 95% prediction interval;
+the estimated number of crustceans species is 52.23, and the interval is (23.26, 81.20).
+
